@@ -8,7 +8,8 @@
 
 import SwiftUI
 
-struct OptionalImage: View {
+// Handle UIImage, that might be nil
+struct OptionalImageView: View {
     var uiImage: UIImage?
     
     var body: some View {

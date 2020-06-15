@@ -8,6 +8,7 @@
 
 import SwiftUI
 
+// the extension is not on Array, but on a Collection. This allows to use sets, instead of arrays
 extension Collection where Element: Identifiable {
     func firstIndex(matching element: Element) -> Self.Index? {
         firstIndex(where: { $0.id == element.id })
