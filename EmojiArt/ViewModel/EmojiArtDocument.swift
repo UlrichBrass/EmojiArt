@@ -14,7 +14,7 @@ class EmojiArtDocument: ObservableObject
     
     // workaround for property observer problem with property wrappers
     // @Published removed here, because we want to use didSet, which did not work at the time of writing the code
-    private var emojiArt: EmojiArt {
+    private var emojiArt: EmojiArtModel {
         willSet {
             // keep the published semantics (however not completely identical)
             objectWillChange.send()
@@ -30,15 +30,20 @@ class EmojiArtDocument: ObservableObject
     // this initializer will bring back everything from last session
     init() {
         // get emojis
-        emojiArt = EmojiArt(json: UserDefaults.standard.data(forKey: EmojiArtDocument.untitled)) ?? EmojiArt()
+        emojiArt = EmojiArtModel(json: UserDefaults.standard.data(forKey: EmojiArtDocument.untitled)) ?? EmojiArtModel()
         // get background
         fetchBackgroundImageData()
     }
         
     @Published private(set) var backgroundImage: UIImage?
+    // mark an emoji for further actions
+    // Selection is not part of the model. It is purely a way of letting the user express which emoji they want to resize or move.
+    @Published var selection  = Set<EmojiArtModel.Emoji>()
     
     // the emojis in my document
-    var emojis: [EmojiArt.Emoji] { emojiArt.emojis }
+    var emojis: [EmojiArtModel.Emoji] { emojiArt.emojis }
+    
+    
     
     // MARK: - Intent(s)
     // needed, because emojiArt is private
@@ -47,14 +52,20 @@ class EmojiArtDocument: ObservableObject
         emojiArt.addEmoji(emoji, x: Int(location.x), y: Int(location.y), size: Int(size))
     }
     
-    func moveEmoji(_ emoji: EmojiArt.Emoji, by offset: CGSize) {
+    func deleteEmoji(_ emoji: EmojiArtModel.Emoji) {
+        if let index = emojiArt.emojis.firstIndex(matching: emoji) {
+            emojiArt.deleteEmoji(index)
+        }
+    }
+    
+    func moveEmoji(_ emoji: EmojiArtModel.Emoji, by offset: CGSize) {
         if let index = emojiArt.emojis.firstIndex(matching: emoji) {
             emojiArt.emojis[index].x += Int(offset.width)
             emojiArt.emojis[index].y += Int(offset.height)
         }
     }
     
-    func scaleEmoji(_ emoji: EmojiArt.Emoji, by scale: CGFloat) {
+    func scaleEmoji(_ emoji: EmojiArtModel.Emoji, by scale: CGFloat) {
         if let index = emojiArt.emojis.firstIndex(matching: emoji) {
             emojiArt.emojis[index].size = Int((CGFloat(emojiArt.emojis[index].size) * scale).rounded(.toNearestOrEven))
         }
@@ -90,7 +101,19 @@ class EmojiArtDocument: ObservableObject
     } // fetchBackgroundImageData
 } //class
 
-extension EmojiArt.Emoji {
+extension EmojiArtModel.Emoji {
     var fontSize: CGFloat { CGFloat(self.size) }
     var location: CGPoint { CGPoint(x: CGFloat(x), y: CGFloat(y)) }
+}
+
+extension Set where Element : Identifiable {
+    // adding a toggleMatching function via an extension (that adds/removes an element to/from the Set based on
+    // whether it’s already there based on Identifiable)
+    mutating func toggleMatching(toggle element: Element){
+        if let index = firstIndex(matching : element) {
+            self.remove(at : index)
+        } else {
+            self.update(with : element)
+        }
+    }
 }

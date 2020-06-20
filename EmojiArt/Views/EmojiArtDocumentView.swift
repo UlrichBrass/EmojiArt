@@ -4,12 +4,12 @@
 //
 //  Created by CS193p Instructor on 4/27/20.
 //  Copyright © 2020 Stanford University. All rights reserved.
-//
+//  Adapted to assignment 4 requirements by Ulrich Braß
 
 import SwiftUI
 
 struct EmojiArtDocumentView: View {
-    @ObservedObject var document: EmojiArtDocument
+    @EnvironmentObject var document: EmojiArtDocument
     
     var body: some View {
         VStack {
@@ -27,7 +27,7 @@ struct EmojiArtDocumentView: View {
             } // Scroll View
                 // let some space on left and right
             .padding(.horizontal)
-            // how much space have we left fro the drawing area
+            // how much space have we left for the drawing area
             GeometryReader { geometry in
                 ZStack {
                     // Background Image
@@ -36,17 +36,20 @@ struct EmojiArtDocumentView: View {
                             .scaleEffect(self.zoomScale)
                             .offset(self.panOffset)
                     )
-                        .gesture(self.doubleTapToZoom(in: geometry.size))
-                   // Emojis, that have been dropped in
+                        .gesture(self.doubleTapToZoomOrDeSelectEmojis(in: geometry.size))
+                        .gesture(self.panGesture())
+                   // Emojis, that have been dropped into the document
                     ForEach(self.document.emojis) { emoji in
-                        Text(emoji.text)
+                        // present view based on presence of emoji in the selection set 
+                        EmojiSelectionView ( emoji : emoji, zoomScale: self.zoomScale, size : geometry.size)
                             .font(animatableWithSize: emoji.fontSize * self.zoomScale)
                             .position(self.position(for: emoji, in: geometry.size))
-                    }
+                            // mark/unmark emoji by putting it into the selection set
+                            
+                    } //ForEach
                 } //ZStack
                 // drawing keep inside bounds of the view
                 .clipped()
-                .gesture(self.panGesture())
                 .gesture(self.zoomGesture())
                 .edgesIgnoringSafeArea([.horizontal, .bottom])
                 // 'of:' lists the supportedTypes as array of URIs, the uniform type identifiers that describe the types of content
@@ -73,13 +76,14 @@ struct EmojiArtDocumentView: View {
     
     // Gesture handling:
     
+    
     // Pinching gesture handling
     @State private var steadyStateZoomScale: CGFloat = 1.0
     // the following state is only used while the gesture is going on
     @GestureState private var gestureZoomScale: CGFloat = 1.0
     
     private var zoomScale: CGFloat {
-        steadyStateZoomScale * gestureZoomScale
+        self.steadyStateZoomScale * (self.hasSelection ? 1 : gestureZoomScale)
     }
     
     private func zoomGesture() -> some Gesture {
@@ -87,11 +91,30 @@ struct EmojiArtDocumentView: View {
             // $ turns gestureZoomScale into a binding, so value can change
             // gestureZoomScale is an inout parameter
             .updating($gestureZoomScale) { latestGestureScale, gestureZoomScale, transaction in
+                if self.hasSelection {
+                    self.scaleAllSelectedEmojis(by : 1 + latestGestureScale - gestureZoomScale)
+                }
                 gestureZoomScale = latestGestureScale
             }
             .onEnded { finalGestureScale in
-                self.steadyStateZoomScale *= finalGestureScale
+                if !self.hasSelection {
+                    self.steadyStateZoomScale *= finalGestureScale
+                }
             }
+    }
+    
+    private func scaleAllSelectedEmojis(by scale : CGFloat){
+        self.document.selection.forEach{ selectedEmoji in
+            self.document.scaleEmoji(selectedEmoji, by : scale)
+        }
+    }
+    
+    private func isSelected(emoji: EmojiArtModel.Emoji) -> Bool {
+        self.document.selection.contains(matching : emoji)
+    }
+    
+    private var hasSelection: Bool {
+        !self.document.selection.isEmpty
     }
     // Pinching
     
@@ -112,18 +135,29 @@ struct EmojiArtDocumentView: View {
             self.steadyStatePanOffset = self.steadyStatePanOffset + (finalDragGestureValue.translation / self.zoomScale)
         }
     }
-    // Drag
+    // End Drag
 
-    // Bring background image to the right size - by double click
-    private func doubleTapToZoom(in size: CGSize) -> some Gesture {
+    // Background click gestures:
+    private func doubleTapToZoomOrDeSelectEmojis(in size: CGSize) -> some Gesture {
+        // Bring background image to the right size - by double click
         TapGesture(count: 2)
             .onEnded {
                 withAnimation {
                     self.zoomToFit(self.document.backgroundImage, in: size)
                 }
             }
+        // With lower priority, to make sure double taps don’t get missed because SwiftUI recognizes the single tap part of a
+        // double tap and doesn’t give an opportunity for the second tap to be recognized as part of a double tap gesture.
+        .exclusively (before:
+        // Single-tapping on the background of EmojiArt (i.e. single-tapping anywhere except on an Emoji
+        // will deselect all emoji.
+            TapGesture(count: 1)
+            .onEnded {
+                self.document.selection.removeAll()
+            }
+        )
     }
-    
+
     private func zoomToFit(_ image: UIImage?, in size: CGSize) {
         if let image = image, image.size.width > 0, image.size.height > 0 {
             let hZoom = size.width / image.size.width
@@ -135,11 +169,12 @@ struct EmojiArtDocumentView: View {
     }
    //
     
-    private func position(for emoji: EmojiArt.Emoji, in size: CGSize) -> CGPoint {
+    private func position(for emoji: EmojiArtModel.Emoji, in size: CGSize) -> CGPoint {
         var location = emoji.location
         location = CGPoint(x: location.x * zoomScale, y: location.y * zoomScale)
         location = CGPoint(x: location.x + size.width/2, y: location.y + size.height/2)
         location = CGPoint(x: location.x + panOffset.width, y: location.y + panOffset.height)
+        
         return location
     }
     
@@ -157,4 +192,4 @@ struct EmojiArtDocumentView: View {
     }
     
     private let defaultEmojiSize: CGFloat = 40
-}
+} // View
