@@ -10,24 +10,27 @@ import SwiftUI
 
 struct EmojiArtDocumentView: View {
     @EnvironmentObject var document: EmojiArtDocument
-    
+    @State private var chosenPalette : String = ""
     var body: some View {
         VStack {
             // Scrollable list of Emojis, that can be picked from
-            ScrollView(.horizontal) {
-                HStack {
-                    // map turns string into array of strings
-                    // make strings identifiable by using the id option with key path self
-                    ForEach(EmojiArtDocument.palette.map { String($0) }, id: \.self) { emoji in
-                        Text(emoji)
-                            .font(Font.system(size: self.defaultEmojiSize))
-                            .onDrag { NSItemProvider(object: emoji as NSString) }
-                    }
-                } //HStack
-            } // Scroll View
-                // let some space on left and right
-            .padding(.horizontal)
-            // how much space have we left for the drawing area
+            HStack {
+                PaletteChooserView(chosenPalette: $chosenPalette)
+                ScrollView(.horizontal) {
+                    HStack {
+                        // map turns string into array of strings
+                        // make strings identifiable by using the id option with key path self
+                        ForEach(chosenPalette.map { String($0) }, id: \.self) { emoji in
+                            Text(emoji)
+                                .font(Font.system(size: self.defaultEmojiSize))
+                                .onDrag { NSItemProvider(object: emoji as NSString) }
+                        }
+                    } //HStack
+                } // Scroll View
+                // use onAppear to avoid init conflict
+                .onAppear{self.chosenPalette = self.document.defaultPalette}
+            } // HStack
+             // how much space have we left for the drawing area
             GeometryReader { geometry in
                 ZStack {
                     // Background Image
@@ -39,19 +42,31 @@ struct EmojiArtDocumentView: View {
                         .gesture(self.doubleTapToZoomOrDeSelectEmojis(in: geometry.size))
                         .gesture(self.panGesture())
                    // Emojis, that have been dropped into the document
-                    ForEach(self.document.emojis) { emoji in
-                        // present view based on presence of emoji in the selection set 
-                        EmojiSelectionView ( emoji : emoji, zoomScale: self.zoomScale, size : geometry.size)
-                            .font(animatableWithSize: emoji.fontSize * self.zoomScale)
-                            .position(self.position(for: emoji, in: geometry.size))
-                            // mark/unmark emoji by putting it into the selection set
-                            
-                    } //ForEach
+                    if self.isLoading {
+                        // In case it takes a little, we show a system Image instead
+                        Image(systemName: "hourglass")
+                            .imageScale(.large)
+                            .spinning()
+                    } else {
+                        // we do not want to show emojis, that have been restored  on an empty (because loading) background
+                        ForEach(self.document.emojis) { emoji in
+                            // present view based on presence of emoji in the selection set
+                            EmojiSelectionView ( emoji : emoji, zoomScale: self.zoomScale, documentSize : self.document.backgroundImage?.size ?? .zero)
+                                .font(animatableWithSize: emoji.fontSize * self.zoomScale)
+                                .position(self.position(for: emoji, in: geometry.size))
+                                // mark/unmark emoji by putting it into the selection set
+                                
+                        } //ForEach
+                    }
                 } //ZStack
                 // drawing keep inside bounds of the view
                 .clipped()
                 .gesture(self.zoomGesture())
                 .edgesIgnoringSafeArea([.horizontal, .bottom])
+                // whenever background changes, size it to fit the frame
+                    .onReceive(self.document.$backgroundImage) { image in
+                        self.zoomToFit(image, in: geometry.size)
+                }
                 // 'of:' lists the supportedTypes as array of URIs, the uniform type identifiers that describe the types of content
                 // this view can accept through drag and drop (image and Emoji(String) here).
                 // 'isTargeted:' is a binding that updates when a drag and drop operation enters or exits the drop target area.
@@ -74,8 +89,10 @@ struct EmojiArtDocumentView: View {
         } //VStack
     } // body
     
+    var isLoading : Bool {
+        document.backgroundURL != nil && document.backgroundImage == nil
+    }
     // Gesture handling:
-    
     
     // Pinching gesture handling
     @State private var steadyStateZoomScale: CGFloat = 1.0
@@ -181,7 +198,7 @@ struct EmojiArtDocumentView: View {
     private func drop(providers: [NSItemProvider], at location: CGPoint) -> Bool {
         var found = providers.loadFirstObject(ofType: URL.self) { url in
             // print("dropped \(url)")
-            self.document.setBackgroundURL(url)
+            self.document.backgroundURL = url
         }
         if !found {
             found = providers.loadObjects(ofType: String.self) { string in

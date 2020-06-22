@@ -7,30 +7,30 @@
 //
 
 import SwiftUI
+import Combine
 
 class EmojiArtDocument: ObservableObject
 {
     static let palette: String = "⭐️⛈🍎🌏🥨⚾️"
     
     // workaround for property observer problem with property wrappers
-    // @Published removed here, because we want to use didSet, which did not work at the time of writing the code
-    private var emojiArt: EmojiArtModel {
-        willSet {
-            // keep the published semantics (however not completely identical)
-            objectWillChange.send()
-        }
-        didSet {
-            // make this state persistent 
-            UserDefaults.standard.set(emojiArt.json, forKey: EmojiArtDocument.untitled)
-        }
-    }
+    @Published private var emojiArt: EmojiArtModel
+    
     // here is our key for persistent storage in user defaults
     private static let untitled = "EmojiArtDocument.Untitled"
+    
+    // cancels subscription if View Model disappears
+    private var autosaveCancellable : AnyCancellable?
     
     // this initializer will bring back everything from last session
     init() {
         // get emojis
         emojiArt = EmojiArtModel(json: UserDefaults.standard.data(forKey: EmojiArtDocument.untitled)) ?? EmojiArtModel()
+        // use the projected value of the published var emojiArt, which is a publisher
+        // sink is a subscriber with closure-based behavior.
+        autosaveCancellable = $emojiArt.sink{ emojiArt in
+            UserDefaults.standard.set(emojiArt.json, forKey : EmojiArtDocument.untitled)
+        }
         // get background
         fetchBackgroundImageData()
     }
@@ -70,33 +70,42 @@ class EmojiArtDocument: ObservableObject
             emojiArt.emojis[index].size = Int((CGFloat(emojiArt.emojis[index].size) * scale).rounded(.toNearestOrEven))
         }
     }
-
-    func setBackgroundURL(_ url: URL?) {
-        emojiArt.backgroundURL = url?.imageURL
-        fetchBackgroundImageData()
+    
+    var backgroundURL : URL? {
+        get {
+            emojiArt.backgroundURL
+        }
+        set {
+            emojiArt.backgroundURL = newValue?.imageURL
+            fetchBackgroundImageData()
+        }
     }
+    // cancels subscription if View Model disappears
+    private var fetchImageCancellable : AnyCancellable?
     
     // fetch in the background
     private func fetchBackgroundImageData() {
         // clear background
         backgroundImage = nil
         if let url = self.emojiArt.backgroundURL {
-            // a non-UI queue with a certain quality of service, defined as:
-            // the user just asked to do this, so do it now
-            DispatchQueue.global(qos: .userInitiated).async {
-                // Plopping this closure onto a Queue
-                // .async will execute this closure, whenever that closure gets to the front of the queue
-                // try and return nil, if it fails
-                if let imageData = try? Data(contentsOf: url) {
-                    // The following needs to go the main queue, because the assignment to backgroundImage cause UI activity
-                    DispatchQueue.main.async {
-                        // make sure, that this image is still the one requested, otherwise ignore
-                        if url == self.emojiArt.backgroundURL {
-                            self.backgroundImage = UIImage(data: imageData)
-                        }
-                    }// main queue
+            // make sure, that no other image load is in progress
+            fetchImageCancellable?.cancel()
+            // use URL session with a shared singleton session object that gives you a reasonable default behavior for creating tasks.
+            // Use the shared session to fetch the contents of a URL to memory with just a few lines of code.
+            let session = URLSession.shared
+            // Get a publisher that wraps a URL session data task for a given URL on global queue
+            // The publisher publishes data when the task completes, or terminates if the task fails with an error.
+            let publisher = session.dataTaskPublisher(for: url)
+                // Transforms all elements from the upstream publisher with a provided closure, to receive the image
+                .map {data, URLResponse in
+                    UIImage(data : data)
                 }
-            } // globa queue
+                // this needs to go the main queue, because the assignment to backgroundImage cause UI activity
+                .receive(on : DispatchQueue.main)
+                // handle errors as nil values
+                .replaceError(with : nil)
+            // A cancellable instance; used for the end assignment of the received value. Deallocation of the result will tear down the subscription stream.
+            fetchImageCancellable = publisher.assign(to: \.backgroundImage, on: self)
         }
     } // fetchBackgroundImageData
 } //class

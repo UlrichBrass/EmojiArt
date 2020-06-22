@@ -13,7 +13,7 @@ struct EmojiSelectionView: View {
     @EnvironmentObject var document: EmojiArtDocument
     var emoji : EmojiArtModel.Emoji
     var zoomScale: CGFloat
-    var size : CGSize
+    var documentSize : CGSize
     var body: some View {
         Text(emoji.text)
             .gesture(self.panGesture())
@@ -63,8 +63,8 @@ struct EmojiSelectionView: View {
     }
     // Check if emoji has been moved outside of the document background
     private func emojiIsOutsideDocumentArea(index : Int) -> Bool {
-        let maxWidth = Int(size.width / self.zoomScale / 2)
-        let maxHeight = Int(size.height / self.zoomScale / 2)
+        let maxWidth = Int(documentSize.width  / 2)
+        let maxHeight = Int(documentSize.height  / 2)
         let margin = 6
         //print ("x= \(abs(document.emojis[index].x) ) maxX= \(maxWidth) y= \(abs(document.emojis[index].y)) maxY= \(maxHeight)")
         return  (abs( document.emojis[index].x) + margin) >= maxWidth ||
