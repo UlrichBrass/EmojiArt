@@ -11,7 +11,6 @@ import Combine
 
 class EmojiArtDocument: ObservableObject
 {
-    static let palette: String = "⭐️⛈🍎🌏🥨⚾️"
     
     // workaround for property observer problem with property wrappers
     @Published private var emojiArt: EmojiArtModel
@@ -30,6 +29,7 @@ class EmojiArtDocument: ObservableObject
         // sink is a subscriber with closure-based behavior.
         autosaveCancellable = $emojiArt.sink{ emojiArt in
             UserDefaults.standard.set(emojiArt.json, forKey : EmojiArtDocument.untitled)
+            print(String(data: emojiArt.json!, encoding: .utf8)!)
         }
         // get background
         fetchBackgroundImageData()
