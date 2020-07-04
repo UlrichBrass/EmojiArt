@@ -9,26 +9,45 @@
 import SwiftUI
 import Combine
 
-class EmojiArtDocument: ObservableObject
+
+class EmojiArtDocument: ObservableObject, Hashable, Identifiable
 {
+    //EmojiArtDocument needs to conform to hashable, if we want to manage it in document store
+    // Therefore we add an id and hash and compare functions, and initialize the id in the init function
+    let id : UUID
+    
+    static func == (lhs: EmojiArtDocument, rhs: EmojiArtDocument) -> Bool {
+        lhs.id == rhs.id
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
     
     // workaround for property observer problem with property wrappers
     @Published private var emojiArt: EmojiArtModel
-    
-    // here is our key for persistent storage in user defaults
-    private static let untitled = "EmojiArtDocument.Untitled"
+    //Keep track of background presentation, by keeping the steady states in view model
+    @Published var steadyStateZoomScale: CGFloat = 1.0
+    @Published var steadyStatePanOffset: CGSize = .zero
+    //
     
     // cancels subscription if View Model disappears
     private var autosaveCancellable : AnyCancellable?
     
     // this initializer will bring back everything from last session
-    init() {
+    // keep init comaptible if existing code, parameter is optionall and even can be nil
+    init(id : UUID? = nil) {
+        self.id = id ?? UUID()
+        // here is our key for persistent storage in user defaults
+        let defaultsKey = "EmojiArtDocument.\(self.id.uuidString)"
+        
         // get emojis
-        emojiArt = EmojiArtModel(json: UserDefaults.standard.data(forKey: EmojiArtDocument.untitled)) ?? EmojiArtModel()
+        emojiArt = EmojiArtModel(json: UserDefaults.standard.data(forKey: defaultsKey)) ?? EmojiArtModel()
         // use the projected value of the published var emojiArt, which is a publisher
         // sink is a subscriber with closure-based behavior.
         autosaveCancellable = $emojiArt.sink{ emojiArt in
-            UserDefaults.standard.set(emojiArt.json, forKey : EmojiArtDocument.untitled)
+            UserDefaults.standard.set(emojiArt.json, forKey : defaultsKey)
             print(String(data: emojiArt.json!, encoding: .utf8)!)
         }
         // get background
