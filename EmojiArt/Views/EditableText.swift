@@ -38,9 +38,14 @@ struct EditableText: View {
                         // (i.e. we never "abandon" changes)
                         self.callOnChangedIfChanged()
                 }
+                .onDisappear {
+                    self.editableText = self.text
+                }
+                
             }
         }
         .onAppear { self.editableText = self.text }
+        
     }
     
     func callOnChangedIfChanged() {

@@ -35,7 +35,7 @@ class EmojiArtDocument: ObservableObject, Hashable, Identifiable
     // cancels subscription if View Model disappears
     private var autosaveCancellable : AnyCancellable?
     
-    // this initializer will bring back everything from last session
+    // this initializer will bring back everything from last session from user defaults
     // keep init comaptible if existing code, parameter is optionall and even can be nil
     init(id : UUID? = nil) {
         self.id = id ?? UUID()
@@ -53,7 +53,35 @@ class EmojiArtDocument: ObservableObject, Hashable, Identifiable
         // get background
         fetchBackgroundImageData()
     }
+    
+    // As an alternative way to retrieve and store settings in the file system, instead of user defaults
+    // The user defaults implementation will be kept, and another init for file system will be provided
+    
+    init(url : URL){
+        self.id = UUID()
+        self.url = url
+        // create EmojiArModel by using its failable initializer by passing json data read from url, or a blank one if url (not yet) exists
+        self.emojiArt = EmojiArtModel(json: try? Data(contentsOf: url)) ??  EmojiArtModel()
         
+        // get background
+        fetchBackgroundImageData()
+        // do autosave
+        autosaveCancellable = $emojiArt.sink{ emojiArt in
+            self.save(emojiArt)
+        }
+    }
+    // In addition to autosave, do an immediate save, whenever  url changes
+    var url : URL? { didSet {
+            self.save(self.emojiArt)
+        }
+    }
+    // save to file system
+    private func save(_ emojiArt : EmojiArtModel){
+        if url != nil {
+            try? emojiArt.json?.write(to: url!)
+        }
+    }
+    
     @Published private(set) var backgroundImage: UIImage?
     // mark an emoji for further actions
     // Selection is not part of the model. It is purely a way of letting the user express which emoji they want to resize or move.
