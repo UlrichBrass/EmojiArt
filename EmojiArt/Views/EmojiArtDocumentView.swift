@@ -86,7 +86,7 @@ struct EmojiArtDocumentView: View {
                     return self.drop(providers: providers, at: location) // returns if drop succeded
                 }
                 // receive background url through cut and paste
-                .navigationBarItems(trailing: Button(
+                    .navigationBarItems(leading : self.pickImage, trailing: Button(
                     action: {
                         if let url = UIPasteboard.general.url, url != self.document.backgroundURL{
                             self.confirmBackgroundPaste = true
@@ -118,6 +118,44 @@ struct EmojiArtDocumentView: View {
             ) //Alert
         } // .alert
     } // body
+    
+    // The image picker control dialog
+    @State private var showImagePicker : Bool = false
+    @State private var imagePickerSourceType = UIImagePickerController.SourceType.photoLibrary
+    private var pickImage : some View {
+        HStack {
+            Image(systemName: "photo")
+                .imageScale(.large)
+                .foregroundColor(.accentColor)
+                .onTapGesture {
+                    self.imagePickerSourceType = .photoLibrary
+                    self.showImagePicker = true
+                }
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Image(systemName: "camera")
+                    .imageScale(.large)
+                    .foregroundColor(.accentColor)
+                    .onTapGesture {
+                        self.imagePickerSourceType = .camera
+                        self.showImagePicker = true
+                    }
+                }
+        }//HStack
+        .sheet(isPresented: $showImagePicker) {
+            // Start UIController
+            ImagePicker(sourceType: self.imagePickerSourceType){ image in
+                if image != nil {
+                    // interface to the rest of the application, by simply storing the image in the filesystem, by using the storeInFilesystem
+                    // extension
+                    DispatchQueue.main.async { // do this after everything settling down. 
+                        self.document.backgroundURL = image?.storeInFilesystem()
+                    }
+                    
+                }
+                self.showImagePicker = false
+            }
+        }
+    } // pickImage
     
     // Variables to control the paste button action
     @State private var explainBackgroundPaste : Bool = false
